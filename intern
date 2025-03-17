@@ -1,0 +1,111 @@
+#setup the backend
+mkdir store-rating-app
+cd store-rating-app
+mkdir backend
+cd backend
+npm init -y
+npm install express pg bcryptjs jsonwebtoken cors body-parser
+#create database using sql
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(60) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    address VARCHAR(400),
+    role VARCHAR(20) NOT NULL
+);
+
+CREATE TABLE stores (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(60) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    address VARCHAR(400),
+    rating FLOAT DEFAULT 0
+);
+
+CREATE TABLE ratings (
+    id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES users(id),
+    store_id INT REFERENCES stores(id),
+    rating INT CHECK (rating >= 1 AND rating <= 5)
+);
+#Create the Express Server: Create a file named server.js in the backend directory.
+const express = require('express');
+const bodyParser = require('body-parser');
+const cors = require('cors');
+const { Pool } = require('pg');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+const app = express();
+const port = 5000;
+
+app.use(cors());
+app.use(bodyParser.json());
+
+const pool = new Pool({
+    user: 'your_db_user',
+    host: 'localhost',
+    database: 'store_rating_db',
+    password: 'your_db_password',
+    port: 5432,
+});
+
+// User Registration
+app.post('/api/register', async (req, res) => {
+    const { name, email, password, address } = req.body;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const role = 'Normal User'; // Default role
+    try {
+        const newUser  = await pool.query(
+            'INSERT INTO users (name, email, password, address, role) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+            [name, email, hashedPassword, address, role]
+        );
+        res.json(newUser .rows[0]);
+    } catch (err) {
+        res.status(500).json(err);
+    }
+});
+
+// User Login
+app.post('/api/login', async (req, res) => {
+    const { email, password } = req.body;
+    const user = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    if (user.rows.length > 0) {
+        const isMatch = await bcrypt.compare(password, user.rows[0].password);
+        if (isMatch) {
+            const token = jwt.sign({ id: user.rows[0].id, role: user.rows[0].role }, 'your_jwt_secret');
+            res.json({ token });
+        } else {
+            res.status(400).json({ message: 'Invalid credentials' });
+        }
+    } else {
+        res.status(400).json({ message: 'User  not found' });
+    }
+});
+
+// Start the server
+app.listen(port, () => {
+    console.log(`Server running on http://localhost:${port}`);
+});
+#Initialize the React App: In the root directory of your project, create a new React app.
+npx create-react-app frontend
+cd frontend
+npm install axios react-router-dom
+Create Components: Create components for registration, login, and store listing. Here’s a simple example for the registration component.
+// src/components/Register.js
+import React, { useState } from 'react';
+import axios from 'axios';
+
+const Register = () => {
+    const [name, setName] = useState('');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [address, setAddress] = useState('');
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        try {
+            const response = await axios.post('http://localhost:5000/api/register', {
+                name,
+                email,
